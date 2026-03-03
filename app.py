@@ -1,34 +1,49 @@
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
+import pillow_avif
+import os
 import io
 
 st.set_page_config(layout="centered")
 
-st.title("🏎 F1 Post Generator")
+st.title("🏎 Formula Rossa Post Generator")
 
-uploaded_file = st.file_uploader("Carica immagine pilota", type=["png", "jpg", "jpeg"])
-driver_name = st.text_input("Nome pilota", "CHARLES LECLERC")
+DRIVER_FOLDER = "Drivers"
+
+# === LISTA DRIVER ===
+driver_files = [f for f in os.listdir(DRIVER_FOLDER) if f.endswith(".avif")]
+
+selected_driver = st.selectbox("Seleziona Pilota", driver_files)
+
 lap_time = st.text_input("Tempo", "1'35\"67")
 
 generate = st.button("Genera Post")
 
-if uploaded_file and generate:
-    # Apri immagine
-    base = Image.open(uploaded_file).convert("RGB")
-    base = base.resize((1080, 1350))
+if generate:
 
-    # Overlay rosso gradiente
-    overlay = Image.new("RGBA", base.size, (255, 0, 0, 0))
+    # === CARICA IMMAGINE ===
+    image_path = os.path.join(DRIVER_FOLDER, selected_driver)
+    base = Image.open(image_path).convert("RGB")
+
+    # === CROP SOLO META' SUPERIORE ===
+    width, height = base.size
+    cropped = base.crop((0, 0, width, height // 2))
+
+    # === RIDIMENSIONA PER IG ===
+    cropped = cropped.resize((1080, 1350))
+
+    # === OVERLAY ROSSO GRADIENTE ===
+    overlay = Image.new("RGBA", cropped.size, (255, 0, 0, 0))
     draw_overlay = ImageDraw.Draw(overlay)
 
     for y in range(800, 1350):
         alpha = int((y - 800) / 550 * 220)
         draw_overlay.rectangle([(0, y), (1080, y+1)], fill=(255, 0, 0, alpha))
 
-    combined = Image.alpha_composite(base.convert("RGBA"), overlay)
+    combined = Image.alpha_composite(cropped.convert("RGBA"), overlay)
     draw = ImageDraw.Draw(combined)
 
-    # Font (usa uno di sistema se non hai file font)
+    # === FONT ===
     try:
         font_big = ImageFont.truetype("arial.ttf", 200)
         font_small = ImageFont.truetype("arial.ttf", 60)
@@ -36,7 +51,12 @@ if uploaded_file and generate:
         font_big = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
-    # Box nome pilota
+    # === ESTRAI NOME DAL FILE ===
+    driver_clean = selected_driver.replace("2026", "")
+    driver_clean = driver_clean.replace("01right.avif", "")
+    driver_name = driver_clean.upper()
+
+    # === BOX NOME ===
     text_width = draw.textlength(driver_name, font=font_small)
     box_x = (1080 - text_width) / 2 - 20
     box_y = 780
@@ -55,7 +75,7 @@ if uploaded_file and generate:
         font=font_small
     )
 
-    # Tempo gigante centrato
+    # === TEMPO GRANDE CENTRATO ===
     time_width = draw.textlength(lap_time, font=font_big)
 
     draw.text(
@@ -67,14 +87,14 @@ if uploaded_file and generate:
 
     st.image(combined)
 
-    # Download
+    # === DOWNLOAD ===
     buf = io.BytesIO()
     combined.convert("RGB").save(buf, format="PNG")
     byte_im = buf.getvalue()
 
     st.download_button(
-        label="Scarica immagine",
+        label="Scarica Post",
         data=byte_im,
-        file_name="f1_post.png",
+        file_name=f"{driver_name}_post.png",
         mime="image/png"
     )
